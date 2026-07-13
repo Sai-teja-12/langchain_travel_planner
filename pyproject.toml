@@ -1,0 +1,28 @@
+[project]
+name = "langchain-travel-planner"
+version = "0.1.0"
+description = "Multi-agent travel planner with LangChain, LangGraph, and Gemini"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "google-search-results>=2.4.2",
+    "googlemaps>=4.10.0",
+    "httpx>=0.28.1",
+    "langchain>=1.3.13",
+    "langchain-core>=1.4.9",
+    "langchain-google-genai>=4.2.7",
+    "langgraph>=1.2.9",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "tavily-python>=0.7.26",
+]
+
+[project.scripts]
+travel-planner = "src.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
