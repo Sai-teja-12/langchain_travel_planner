@@ -25,6 +25,8 @@ from src.models.schemas import (
 )
 from src.utils.agent_loop import message_content_to_text
 from src.utils.json_utils import extract_json_array
+from src.utils.tracing import agent_config
+
 
 class TravelState(TypedDict):
     request: TravelRequest
@@ -163,7 +165,8 @@ async def assemble_node(state: TravelState) -> dict:
                     )
                 ),
                 HumanMessage(content=state_snapshot),
-            ]
+            ],
+            config=agent_config("assemble", "trip-summary"),
         )
 
         tips_model = create_model(temperature=0, provider=provider)
@@ -177,7 +180,8 @@ async def assemble_node(state: TravelState) -> dict:
                     )
                 ),
                 HumanMessage(content=state_snapshot),
-            ]
+            ],
+            config=agent_config("assemble", "travel-tips"),
         )
 
         travel_tips = [

@@ -5,6 +5,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 from langchain_core.tools import BaseTool
 
+from src.utils.tracing import agent_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -84,13 +86,17 @@ async def run_agent_loop(
     Looks up each tool by name (not tools[0]) and uses each call's own id
     for ToolMessage, whether the call came from tool_calls or content.
 
-    agent_name identifies the caller in logs when debugging the loop.
+    agent_name is used to name LLM/tool runs in LangSmith traces so each
+    span is attributable to a specific agent and iteration.
     """
     tools_by_name = {t.name: t for t in tools}
     model_with_tools = model.bind_tools(tools)
 
     for iteration in range(1, max_iter + 1):
-        response = await model_with_tools.ainvoke(messages)
+        response = await model_with_tools.ainvoke(
+            messages,
+            config=agent_config(agent_name, f"llm-iter-{iteration}", iteration=iteration),
+        )
         tool_calls = extract_gemini_calls(response)
         messages.append(response)
 
@@ -103,7 +109,12 @@ async def run_agent_loop(
                 result = f"Unknown tool: {call['name']}"
                 logger.warning("Unknown tool requested: %s", call["name"])
             else:
-                result = await tool.ainvoke(call["args"])
+                result = await tool.ainvoke(
+                    call["args"],
+                    config=agent_config(
+                        agent_name, f"tool:{call['name']}", iteration=iteration
+                    ),
+                )
             messages.append(
                 ToolMessage(content=str(result), tool_call_id=call["id"] or call["name"])
             )
@@ -114,5 +125,8 @@ async def run_agent_loop(
             "based on the information gathered so far. Do not call any tools."
         )
     )
-    final_response = await model_with_tools.ainvoke(messages)
+    final_response = await model_with_tools.ainvoke(
+        messages,
+        config=agent_config(agent_name, "llm-final-forced", iteration=max_iter + 1),
+    )
     return message_content_to_text(final_response.content)

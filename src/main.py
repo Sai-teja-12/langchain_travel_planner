@@ -14,8 +14,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+import logging
+
+# When tracing is on, surface real ingestion errors (bad key, wrong endpoint)
+# so they can be fixed; when off, silence the client entirely.
+if os.getenv("LANGSMITH_TRACING", "").lower() in ("true", "1"):
+    logging.getLogger("langsmith").setLevel(logging.ERROR)
+else:
+    logging.getLogger("langsmith").setLevel(logging.CRITICAL)
+
 from src.graph.travel_planner_graph import build_travel_planner_graph
 from src.models.schemas import TravelRequest, TripPlan
+from src.utils.tracing import build_root_config, get_trace_url, tracing_enabled
 
 NODE_LABELS = {
     "destination_research": "Destination researched",
@@ -214,11 +224,13 @@ async def run_planner(request: TravelRequest) -> None:
     final_plan: Optional[TripPlan] = None
     errors: List[str] = []
 
+    trace_config = build_root_config(request)
     print("\nPlanning your trip...\n")
 
     async for event in graph.astream_events(
         {"request": request, "errors": []},
         version="v2",
+        config=trace_config,
     ):
         metadata = event.get("metadata") or {}
         node_name = metadata.get("langgraph_node") or ""
@@ -238,6 +250,17 @@ async def run_planner(request: TravelRequest) -> None:
         print("\nWarnings (non-fatal):")
         for err in errors:
             print(f"  ⚠  {err}")
+
+    if tracing_enabled():
+        url = get_trace_url(trace_config["run_id"])
+        if url:
+            print(f"\nLangSmith trace: {url}")
+        else:
+            project = os.getenv("LANGSMITH_PROJECT", "default")
+            print(
+                f"\nLangSmith trace uploaded to project '{project}' "
+                "(open at https://apac.smith.langchain.com to view)."
+            )
 
     if final_plan is None:
         print("\nNo trip plan was produced. Check warnings above.", file=sys.stderr)
